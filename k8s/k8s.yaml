@@ -1,12 +1,25 @@
 apiVersion: v1
 kind: Secret
 metadata:
-  name: postgres-secret
+  name: postgres-secrets # AJUSTADO: Nome do Secret para consistência
+  namespace: default    # Adicionado namespace para clareza, assumindo default
 type: Opaque
-stringData:
+stringData: # stringData é bom para legibilidade, os valores não precisam ser base64
   POSTGRES_DB: store
   POSTGRES_USER: store
-  POSTGRES_PASSWORD: 5eCr3t
+  POSTGRES_PASSWORD: 5eCr3t # Lembre-se que esta é a senha real
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-configmap # ADICIONADO: O ConfigMap que estava faltando
+  namespace: default      # Adicionado namespace para clareza
+data:
+  POSTGRES_HOST: "postgres" # "postgres" é o nome do Service do PostgreSQL abaixo
+  # Você poderia adicionar POSTGRES_PORT: "5432" aqui também se quisesse,
+  # mas suas aplicações parecem já usar 5432 como padrão se não especificado.
 
 ---
 
@@ -14,6 +27,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: postgres
+  namespace: default # Adicionado namespace para clareza
 spec:
   replicas: 1
   selector:
@@ -31,23 +45,30 @@ spec:
             - containerPort: 5432
           envFrom:
             - secretRef:
-                name: postgres-secret
+                name: postgres-secrets # AJUSTADO: Referenciando o nome correto do Secret
+          # É bom também definir as variáveis de ambiente para o container postgres
+          # para que ele use as credenciais do Secret para sua própria inicialização.
+          # O envFrom acima já faz isso, pois o container postgres usa essas
+          # variáveis (POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB) por padrão.
           volumeMounts:
             - name: postgres-storage
               mountPath: /var/lib/postgresql/data
       volumes:
         - name: postgres-storage
-          emptyDir: {} 
-
+          emptyDir: {} # Lembre-se: os dados serão perdidos se o pod for reiniciado.
+                       # Para persistência, use PersistentVolumeClaim.
 ---
 
 apiVersion: v1
 kind: Service
 metadata:
-  name: postgres
+  name: postgres # Este é o nome que deve ser usado em POSTGRES_HOST no ConfigMap
+  namespace: default # Adicionado namespace para clareza
 spec:
   selector:
     app: postgres
   ports:
     - port: 5432
       targetPort: 5432
+  # type: ClusterIP é o padrão e é adequado aqui,
+  # pois o banco só precisa ser acessível dentro do cluster.
